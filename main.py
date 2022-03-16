@@ -24,21 +24,21 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 class MLP(nn.Module):
     
     def __init__(self, input_dims, hid_dims, out_dims, kaiming_init=False):
-        super(MLP, self).__init__()
-        self.input_dims = input_dims
+        super(MLP, self).__init__()   #初始化 建立模型
+        self.input_dims = input_dims #网络组件 输入层 隐藏层 输出层
         self.hid_dims = hid_dims
         self.output_dims = out_dims
-        self.layers = nn.ModuleList()
+        self.layers = nn.ModuleList()  #modulelist辅助式，一次性建立多个相同结构 像list
         
-        self.layers.append(nn.Linear(self.input_dims, self.hid_dims[0]))
-        self.layers.append(nn.ReLU())
+        self.layers.append(nn.Linear(self.input_dims, self.hid_dims[0]))  #线性回归
+        self.layers.append(nn.ReLU())  #线性整流激活函数RELU ，输入向量经过该函数回输出至下一层
         for i in range(len(hid_dims) - 1):
             self.layers.append(nn.Linear(self.hid_dims[i], self.hid_dims[i + 1]))
             self.layers.append(nn.ReLU())
 
         self.out_layer = nn.Linear(self.hid_dims[-1], self.output_dims)
         if kaiming_init:
-            self.reset_parameters()
+            self.reset_parameters()  #参数初始化
         
     def reset_parameters(self):
         for layer in self.layers:
@@ -48,16 +48,16 @@ class MLP(nn.Module):
         init.xavier_uniform_(self.out_layer.weight)
         init.zeros_(self.out_layer.bias)
         
-    def forward(self, x):
+    def forward(self, x): #前向传播方法 ？
         h = x
         for i, layer in enumerate(self.layers):
             h = layer(h)
         h = self.out_layer(h)
-        h = torch.tanh_(h)
+        h = torch.tanh_(h) #双曲正弦 激活函数
         return h
 
 
-class AdaptiveSoftThreshold(nn.Module):
+class AdaptiveSoftThreshold(nn.Module):  #软阈值算子
     def __init__(self, dim):
         super(AdaptiveSoftThreshold, self).__init__()
         self.dim = dim
@@ -74,8 +74,8 @@ class SENet(nn.Module):
         self.input_dims = input_dims
         self.hid_dims = hid_dims
         self.out_dims = out_dims
-        self.kaiming_init = kaiming_init
-        self.shrink = 1.0 / out_dims
+        self.kaiming_init = kaiming_init #
+        self.shrink = 1.0 / out_dims 
 
         self.net_q = MLP(input_dims=self.input_dims,
                          hid_dims=self.hid_dims,
@@ -112,10 +112,10 @@ def regularizer(c, lmbd=1.0):
     return lmbd * torch.abs(c).sum() + (1.0 - lmbd) / 2.0 * torch.pow(c, 2).sum()
 
 
-def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000):
+def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): #获得稀疏表示  minibatch
     N, D = data.shape
-    non_zeros = min(N, non_zeros)
-    C = torch.empty([batch_size, N])
+    non_zeros = min(N, non_zeros) #选择最小的1000个非零系数
+    C = torch.empty([batch_size, N])  #把C中这些系数置0
     if (N % batch_size != 0):
         raise Exception("batch_size should be a factor of dataset size.")
     if (N % chunk_size != 0):
@@ -124,7 +124,7 @@ def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000):
     val = []
     indicies = []
     with torch.no_grad():
-        senet.eval()
+        senet.eval() #执行一个字符串表达式
         for i in range(data.shape[0] // batch_size):
             chunk = data[i * batch_size:(i + 1) * batch_size].cuda()
             q = senet.query_embedding(chunk)
@@ -132,7 +132,7 @@ def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000):
                 chunk_samples = data[j * chunk_size: (j + 1) * chunk_size].cuda()
                 k = senet.key_embedding(chunk_samples)   
                 temp = senet.get_coeff(q, k)
-                C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()
+                C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()#按列 将得到的分块的coeff输入矩阵C
 
             rows = list(range(batch_size))
             cols = [j + i * batch_size for j in rows]
@@ -326,7 +326,7 @@ if __name__ == "__main__":
                     k_block = senet.key_embedding(block)
                     c = senet.get_coeff(q_batch, k_block)
                     rec_batch = rec_batch + c.mm(block)
-                    reg = reg + regularizer(c, args.lmbd)
+                    reg = reg + regularizer(c, args.lmbd)  #正则化
                 
                 diag_c = senet.thres((q_batch * k_batch).sum(dim=1, keepdim=True)) * senet.shrink
                 rec_batch = rec_batch - diag_c * batch
