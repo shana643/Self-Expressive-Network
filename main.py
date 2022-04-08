@@ -112,7 +112,7 @@ def regularizer(c, lmbd=1.0):
     return lmbd * torch.abs(c).sum() + (1.0 - lmbd) / 2.0 * torch.pow(c, 2).sum()
 
 
-def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): #获得稀疏表示  minibatch
+def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): #获得稀疏表示  
     N, D = data.shape
     non_zeros = min(N, non_zeros) #选择最小的1000个非零系数
     C = torch.empty([batch_size, N])  #把C中这些系数置0
@@ -174,14 +174,14 @@ def evaluate(senet, data, labels, num_subspaces, spectral_dim, non_zeros=1000, n
         Aff = get_knn_Aff(C_sparse_normalized, k=n_neighbors, mode=knn_mode)
     else:
         raise Exception("affinity should be 'symmetric' or 'nearest_neighbor'")
-    preds = utils.spectral_clustering(Aff, num_subspaces, spectral_dim)
-    acc = clustering_accuracy(labels, preds)
+    preds = utils.spectral_clustering(Aff, num_subspaces, spectral_dim) #谱聚类
+    acc = clustering_accuracy(labels, preds)  #三个评估指标
     nmi = normalized_mutual_info_score(labels, preds, average_method='geometric')
     ari = adjusted_rand_score(labels, preds)
     return acc, nmi, ari
 
 
-def same_seeds(seed):
+def same_seeds(seed):  #随机种子，为了保证模型的可复现性
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
@@ -278,12 +278,12 @@ if __name__ == "__main__":
 
     result = open('{}/results.csv'.format(folder), 'w')
     writer = csv.writer(result)
-    writer.writerow(["N", "ACC", "NMI", "ARI"])
+    writer.writerow(["N", "ACC", "NMI", "ARI"])  #三个参数 来表示聚类性能
 
     global_steps = 0
     for N in [200, 500, 1000, 2000, 5000, 10000, 20000]:
-        sampled_idx = np.random.choice(full_samples.shape[0], N, replace=False)
-        samples, labels = full_samples[sampled_idx], full_labels[sampled_idx]
+        sampled_idx = np.random.choice(full_samples.shape[0], N, replace=False) #随机选N个样本
+        samples, labels = full_samples[sampled_idx], full_labels[sampled_idx] 
         block_size = min(N, 10000)
       
         with open('{}/{}_samples_{}.pkl'.format(folder, args.dataset, N), 'wb') as f:
@@ -297,11 +297,11 @@ if __name__ == "__main__":
         data = utils.p_normalize(data)
 
         n_iter_per_epoch = samples.shape[0] // args.batch_size
-        n_step_per_iter = round(all_samples // block_size)
-        n_epochs = args.total_iters // n_iter_per_epoch
+        n_step_per_iter = round(all_samples // block_size) 
+        n_epochs = args.total_iters // n_iter_per_epoch 
         
-        senet = SENet(ambient_dim, args.hid_dims, args.out_dims, kaiming_init=True).cuda()
-        optimizer = optim.Adam(senet.parameters(), lr=args.lr)
+        senet = SENet(ambient_dim, args.hid_dims, args.out_dims, kaiming_init=True).cuda() #经过网络
+        optimizer = optim.Adam(senet.parameters(), lr=args.lr) #Adam优化器
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=args.lr_min)
 
         n_iters = 0
@@ -324,7 +324,7 @@ if __name__ == "__main__":
                 for j in range(n_step_per_iter):
                     block = data[j * block_size: (j + 1) * block_size].cuda()
                     k_block = senet.key_embedding(block)
-                    c = senet.get_coeff(q_batch, k_block)
+                    c = senet.get_coeff(q_batch, k_block)  #乘积
                     rec_batch = rec_batch + c.mm(block)
                     reg = reg + regularizer(c, args.lmbd)  #正则化
                 
@@ -332,7 +332,7 @@ if __name__ == "__main__":
                 rec_batch = rec_batch - diag_c * batch
                 reg = reg - regularizer(diag_c, args.lmbd)
                 
-                rec_loss = torch.sum(torch.pow(batch - rec_batch, 2))
+                rec_loss = torch.sum(torch.pow(batch - rec_batch, 2))  #损失函数
                 loss = (0.5 * args.gamma * rec_loss + reg) / args.batch_size
 
                 optimizer.zero_grad()
