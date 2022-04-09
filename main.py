@@ -132,11 +132,11 @@ def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): 
                 chunk_samples = data[j * chunk_size: (j + 1) * chunk_size].cuda()
                 k = senet.key_embedding(chunk_samples)   
                 temp = senet.get_coeff(q, k)
-                C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()#按列 将得到的分块的coeff输入矩阵C
+                C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()#按列将得到的分块的coeff输入矩阵C
 
             rows = list(range(batch_size))
             cols = [j + i * batch_size for j in rows]
-            C[rows, cols] = 0.0
+            C[rows, cols] = 0.0 #对角线置0
 
             _, index = torch.topk(torch.abs(C), dim=1, k=non_zeros)
             
@@ -144,18 +144,18 @@ def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): 
             index = index.reshape([-1]).cpu().data.numpy()
             indicies.append(index)
     
-    val = np.concatenate(val, axis=0)
+    val = np.concatenate(val, axis=0) #拼接
     indicies = np.concatenate(indicies, axis=0)
     indptr = [non_zeros * i for i in range(N + 1)]
     
-    C_sparse = sparse.csr_matrix((val, indicies, indptr), shape=[N, N])
+    C_sparse = sparse.csr_matrix((val, indicies, indptr), shape=[N, N]) #矩阵的压缩存储
     return C_sparse
 
 
 def get_knn_Aff(C_sparse_normalized, k=3, mode='symmetric'):
     C_knn = kneighbors_graph(C_sparse_normalized, k, mode='connectivity', include_self=False, n_jobs=10)
-    if mode == 'symmetric':
-        Aff_knn = 0.5 * (C_knn + C_knn.T)
+    if mode == 'symmetric': #对称的
+        Aff_knn = 0.5 * (C_knn + C_knn.T) #C+C的转置
     elif mode == 'reciprocal':
         Aff_knn = C_knn.multiply(C_knn.T)
     else:
@@ -174,7 +174,7 @@ def evaluate(senet, data, labels, num_subspaces, spectral_dim, non_zeros=1000, n
         Aff = get_knn_Aff(C_sparse_normalized, k=n_neighbors, mode=knn_mode)
     else:
         raise Exception("affinity should be 'symmetric' or 'nearest_neighbor'")
-    preds = utils.spectral_clustering(Aff, num_subspaces, spectral_dim) #谱聚类
+    preds = utils.spectral_clustering(Aff, num_subspaces, spectral_dim) #谱聚类 Aff是距离矩阵 num_subspaces分为积累
     acc = clustering_accuracy(labels, preds)  #三个评估指标
     nmi = normalized_mutual_info_score(labels, preds, average_method='geometric')
     ari = adjusted_rand_score(labels, preds)
@@ -193,9 +193,9 @@ def same_seeds(seed):  #随机种子，为了保证模型的可复现性
 
 
 if __name__ == "__main__": 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default="MNIST")
-    parser.add_argument('--num_subspaces', type=int, default=10)
+    parser = argparse.ArgumentParser() #创建一个解析器
+    parser.add_argument('--dataset', type=str, default="MNIST") #添加参数
+    parser.add_argument('--num_subspaces', type=int, default=10) #聚类维数
     parser.add_argument('--gamma', type=float, default=200.0)
     parser.add_argument('--lmbd', type=float, default=0.9)
     parser.add_argument('--hid_dims', type=int, default=[1024, 1024, 1024])
@@ -208,13 +208,13 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--chunk_size', type=int, default=10000)
     parser.add_argument('--non_zeros', type=int, default=1000)
-    parser.add_argument('--n_neighbors', type=int, default=3)
-    parser.add_argument('--spectral_dim', type=int, default=15)
-    parser.add_argument('--affinity', type=str, default="nearest_neighbor")
+    parser.add_argument('--n_neighbors', type=int, default=3) #KNN算法K的个数
+    parser.add_argument('--spectral_dim', type=int, default=15)#？？
+    parser.add_argument('--affinity', type=str, default="nearest_neighbor") #KNN方法构建距离矩阵
     parser.add_argument('--mean_subtract', dest='mean_subtraction', action='store_true')
     parser.set_defaults(mean_subtraction=False)
     parser.add_argument('--seed', type=int, default=0)
-    args = parser.parse_args()
+    args = parser.parse_args() #解析参数
 
     if args.dataset == 'MNIST' or args.dataset == 'FashionMNIST':
         args.__setattr__('gamma', 200.0)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     else:
         raise Exception("Only MNIST, FashionMNIST, EMNIST and CIFAR10 are currently supported.")
 
-    fit_msg = "Experiments on {}, numpy_seed=0, total_iters=100000, lambda=0.9, gamma=200.0".format(args.dataset, args.seed)
+    fit_msg = "Experiments on {}, numpy_seed=0, total_iters=100000, lambda=0.9, gamma=200.0".format(args.dataset, args.seed) #？？
     print(fit_msg)
 
     folder = "{}_result".format(args.dataset)
@@ -249,7 +249,7 @@ if __name__ == "__main__":
         os.mkdir(folder)
 
     same_seeds(args.seed)
-    tic = time.time()
+    tic = time.time() #返回时间戳
 
     if args.dataset in ["MNIST", "FashionMNIST", "EMNIST"]:
         with open('datasets/{}/{}_scattering_train_data.pkl'.format(args.dataset, args.dataset), 'rb') as f:
@@ -270,13 +270,13 @@ if __name__ == "__main__":
     else:
         raise Exception("Only MNIST, FashionMNIST and EMNIST are currently supported.")
     
-    if args.mean_subtract:
+    if args.mean_subtract: #均值滤波
         print("Mean Subtraction")
         full_samples = full_samples - np.mean(full_samples, axis=0, keepdims=True)  # mean subtraction
     
     full_labels = full_labels - np.min(full_labels) # 计算sre时需要label的范围是 0 ~ num_subspaces - 1
 
-    result = open('{}/results.csv'.format(folder), 'w')
+    result = open('{}/results.csv'.format(folder), 'w')#存输出
     writer = csv.writer(result)
     writer.writerow(["N", "ACC", "NMI", "ARI"])  #三个参数 来表示聚类性能
 
@@ -296,9 +296,9 @@ if __name__ == "__main__":
         data = torch.from_numpy(samples).float()
         data = utils.p_normalize(data)
 
-        n_iter_per_epoch = samples.shape[0] // args.batch_size
-        n_step_per_iter = round(all_samples // block_size) 
-        n_epochs = args.total_iters // n_iter_per_epoch 
+        n_iter_per_epoch = samples.shape[0] // args.batch_size #每次训练在训练集中取batchsize个样本训练
+        n_step_per_iter = round(all_samples // block_size)  #1个iteration等于使用batchsize个样本训练一次
+        n_epochs = args.total_iters // n_iter_per_epoch  #1个epoch等于使用训练集中的全部样本训练一次
         
         senet = SENet(ambient_dim, args.hid_dims, args.out_dims, kaiming_init=True).cuda() #经过网络
         optimizer = optim.Adam(senet.parameters(), lr=args.lr) #Adam优化器
@@ -314,7 +314,7 @@ if __name__ == "__main__":
             for i in range(n_iter_per_epoch):
                 senet.train()
 
-                batch_idx = randidx[i * args.batch_size : (i + 1) * args.batch_size]
+                batch_idx = randidx[i * args.batch_size : (i + 1) * args.batch_size] 
                 batch = data[batch_idx].cuda()
                 q_batch = senet.query_embedding(batch)
                 k_batch = senet.key_embedding(batch)
