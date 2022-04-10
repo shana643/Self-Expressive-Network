@@ -98,8 +98,8 @@ class SENet(nn.Module):
         return k_emb
 
     def get_coeff(self, q_emb, k_emb):
-        c = self.thres(q_emb.mm(k_emb.t()))
-        return self.shrink * c
+        c = self.thres(q_emb.mm(k_emb.t())) #qk（T）软阈值
+        return self.shrink * c #shrink=1/out.dims
 
     def forward(self, queries, keys):
         q = self.query_embedding(queries)
@@ -131,8 +131,8 @@ def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): 
             for j in range(data.shape[0] // chunk_size):
                 chunk_samples = data[j * chunk_size: (j + 1) * chunk_size].cuda()
                 k = senet.key_embedding(chunk_samples)   
-                temp = senet.get_coeff(q, k)
-                C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()#按列将得到的分块的coeff输入矩阵C
+                temp = senet.get_coeff(q, k) #temp为自表达系数
+                C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()#按列将得到的分块的coeff输入矩阵C 构建自表达矩阵C
 
             rows = list(range(batch_size))
             cols = [j + i * batch_size for j in rows]
@@ -174,7 +174,7 @@ def evaluate(senet, data, labels, num_subspaces, spectral_dim, non_zeros=1000, n
         Aff = get_knn_Aff(C_sparse_normalized, k=n_neighbors, mode=knn_mode)
     else:
         raise Exception("affinity should be 'symmetric' or 'nearest_neighbor'")
-    preds = utils.spectral_clustering(Aff, num_subspaces, spectral_dim) #谱聚类 Aff是距离矩阵 num_subspaces分为积累
+    preds = utils.spectral_clustering(Aff, num_subspaces, spectral_dim) #谱聚类 Aff是距离矩阵 num_subspaces为聚类维数
     acc = clustering_accuracy(labels, preds)  #三个评估指标
     nmi = normalized_mutual_info_score(labels, preds, average_method='geometric')
     ari = adjusted_rand_score(labels, preds)
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     if args.dataset in ["MNIST", "FashionMNIST", "EMNIST"]:
         with open('datasets/{}/{}_scattering_train_data.pkl'.format(args.dataset, args.dataset), 'rb') as f:
-            train_samples = pickle.load(f)
+            train_samples = pickle.load(f)  #从pickle格式的文件中读取数据并转换为Python的类型
         with open('datasets/{}/{}_scattering_train_label.pkl'.format(args.dataset, args.dataset), 'rb') as f:
             train_labels = pickle.load(f)
         with open('datasets/{}/{}_scattering_test_data.pkl'.format(args.dataset, args.dataset), 'rb') as f:
@@ -287,11 +287,11 @@ if __name__ == "__main__":
         block_size = min(N, 10000)
       
         with open('{}/{}_samples_{}.pkl'.format(folder, args.dataset, N), 'wb') as f:
-            pickle.dump(samples, f)
+            pickle.dump(samples, f) #将Python数据转换并保存到pickle格式的文件内。
         with open('{}/{}_labels_{}.pkl'.format(folder, args.dataset, N), 'wb') as f:
             pickle.dump(labels, f)    
 
-        all_samples, ambient_dim = samples.shape[0], samples.shape[1]
+        all_samples, ambient_dim = samples.shape[0], samples.shape[1] #shape[0]表示图像高度（矩阵的行数） shape[1]表示宽度 第一维 第二维尺寸大小
 
         data = torch.from_numpy(samples).float()
         data = utils.p_normalize(data)
@@ -305,25 +305,25 @@ if __name__ == "__main__":
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=args.lr_min)
 
         n_iters = 0
-        pbar = tqdm(range(n_epochs), ncols=120)
+        pbar = tqdm(range(n_epochs), ncols=120) #进度条
 
         for epoch in pbar:
             pbar.set_description(f"Epoch {epoch}")
-            randidx = torch.randperm(data.shape[0])
+            randidx = torch.randperm(data.shape[0])  #随机数字序列
             
-            for i in range(n_iter_per_epoch):
+            for i in range(n_iter_per_epoch): #训练模型
                 senet.train()
 
                 batch_idx = randidx[i * args.batch_size : (i + 1) * args.batch_size] 
-                batch = data[batch_idx].cuda()
-                q_batch = senet.query_embedding(batch)
+                batch = data[batch_idx].cuda() #从cpu转到GPU 加速
+                q_batch = senet.query_embedding(batch) 
                 k_batch = senet.key_embedding(batch)
                 
                 rec_batch = torch.zeros_like(batch).cuda()
                 reg = torch.zeros([1]).cuda()
                 for j in range(n_step_per_iter):
                     block = data[j * block_size: (j + 1) * block_size].cuda()
-                    k_block = senet.key_embedding(block)
+                    k_block = senet.key_embedding(block) #用block算 降低计算量
                     c = senet.get_coeff(q_batch, k_block)  #乘积
                     rec_batch = rec_batch + c.mm(block)
                     reg = reg + regularizer(c, args.lmbd)  #正则化
