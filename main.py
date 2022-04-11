@@ -126,10 +126,10 @@ def get_sparse_rep(senet, data, batch_size=10, chunk_size=100, non_zeros=1000): 
     with torch.no_grad():
         senet.eval() #执行一个字符串表达式
         for i in range(data.shape[0] // batch_size):
-            chunk = data[i * batch_size:(i + 1) * batch_size].cuda()
+            chunk = data[i * batch_size:(i + 1) * batch_size].cuda() #将内存中的数据分批(batch_size)送到显存中进行运算
             q = senet.query_embedding(chunk)
             for j in range(data.shape[0] // chunk_size):
-                chunk_samples = data[j * chunk_size: (j + 1) * chunk_size].cuda()
+                chunk_samples = data[j * chunk_size: (j + 1) * chunk_size].cuda() #动态调度让每一条线程执行通过块大小（chunk-size）（默认为1）指定数量的迭代
                 k = senet.key_embedding(chunk_samples)   
                 temp = senet.get_coeff(q, k) #temp为自表达系数
                 C[:, j * chunk_size:(j + 1) * chunk_size] = temp.cpu()#按列将得到的分块的coeff输入矩阵C 构建自表达矩阵C
