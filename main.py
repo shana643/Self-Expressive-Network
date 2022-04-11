@@ -302,7 +302,7 @@ if __name__ == "__main__":
         
         senet = SENet(ambient_dim, args.hid_dims, args.out_dims, kaiming_init=True).cuda() #经过网络
         optimizer = optim.Adam(senet.parameters(), lr=args.lr) #Adam优化器
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=args.lr_min)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=args.lr_min) #余弦退火
 
         n_iters = 0
         pbar = tqdm(range(n_epochs), ncols=120) #进度条
